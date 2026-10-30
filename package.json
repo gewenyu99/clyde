@@ -1,0 +1,12 @@
+{
+  "name": "clyde",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.core.json && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.15",
+    "typescript": "5.8.3"
+  }
+}

@@ -1,0 +1,24 @@
+# Slice 0 results
+
+The slice 0 platform spike ran on 2026-10-29 against Claude Code 2.1.309 on macOS 15.8.1. Each probe was a throwaway mod in a real `claude -p` session, and the spike code was deleted. Probes that need a model turn are unrun, since a nested `claude -p` under the desktop app has no login.
+
+| Probe | Result | What it means |
+|---|---|---|
+| Socket peer is the host (socket) | pass | clyded can bind a session by LOCAL_PEERPID equal to the claude pid (R28). The socket path must stay under macOS's 104-byte limit, so it can't sit under CLAUDE_PLUGIN_DATA or a deep scratch path. |
+| Web-fetch policy allows the socket (socket) | pass | A socketPath fetch to a same-user Unix socket isn't gated by permission or the default web-fetch policy. This run had no org policy set, so an org web-fetch policy that refuses http://clyde/ is untested. |
+| Attach child's parent is the host (socket) | pass | Children from $.process.run are direct children of the claude process, the same pid the socket peer check sees, so clyded can check a launched child's ppid against the bound session pid. |
+| A setsid helper outlives the session (socket) | pass | A detached clyded launched through $.process.run returns at once, gets reparented to launchd and outlives the session, so the per-user helper lifetime in R23 works. The launcher must close stdio, or run() waits until its timeout. |
+| Registered checker runs on Opus with only one tool (checker) | partial | $.tool.register and $.agent.register (tools:[mcp__chk__verdict], model claude-opus-5-5) are in force by turn one in -p. The Opus pin and the one-tool limit stay unproven until a logged-in shell runs the mod. |
+| agent.spawn hook rewrites prompt and pins model (checker) | unrun | Untested. The types say a hook can rewrite prompt and model, and next() returns {model, agentId}, so clyde's brief swap stays an assumption until a logged-in run. |
+| tool.call carries agentId (checker) | unrun | The verdict gate clyde wants (accept only the spawned agentId, reject main-loop calls with none) rests on the AgentLoop type docs alone so far. |
+| classic.Stop block re-prompts (checker) | unrun | The turn-end block clyde relies on is unverified. Rerun mode C in a logged-in shell before building on it. |
+| Model-driven run (setup) (inner-edit) | fail | A nested `claude -p` cannot authenticate under the Desktop host, so slice-0 probes that need a model turn need Vincent to log in to the standalone CLI (or need a different auth route); results below are from inner calls driven by the mod with no model turn. |
+| Inner Edit through $.tool.call: permission path (inner-edit) | pass | An inner $.tool.call Edit goes through the normal permission path: mode, rules and tool.check hooks all apply, and in -p an ask becomes a deny. So clyde_edit inherits the writer's permission, as design step 5 assumes. |
+| Read state, file never Read, in cwd (inner-edit) | pass | On current models in the cwd, the read-state guard never fires, so clyde's Read-and-retry branch is dead code there. Keep it anyway, because it is needed outside the cwd and on older models. |
+| Outside the cwd (inner-edit) | pass | Outside the cwd, Edit refuses for read state. One inner Read plus a retry inside the same handler satisfies it, but the inner Read needs its own read permission, which acceptEdits does not grant outside the cwd. So clyde_edit may meet two permission asks (Read, then Edit), or a plain refusal in -p. |
+| Older model (inner-edit) | pass | claude-sonnet-4-6 is not an older model for this guard. The guard fires in the cwd only for the listed models (sonnet-4-5, opus-4-6 and older), and the inner Read and retry clears it there. The guard keys on the session's (or served caller's) model, so clyde's retry path matters per model. Mod-driven, not model-driven: see probe 0. |
+| macOS key store from a bare CLI (keys) | partial | Clyde can keep a key in the macOS login keychain from an unsigned CLI by running /usr/bin/security with no cgo and no prompt. The item is only a legacy file-keychain item, not this-device-only, and readable by anything that runs `security` as the user. A real this-device-only item needs a signed binary with a keychain-access-groups entitlement. |
+| Linux key store (headless) (keys) | pass | On headless Linux, the kernel keyring stores and reads with no desktop session, but only for the life of the session and not across reboots. Default Docker seccomp blocks it. gnome-keyring/libsecret needs a D-Bus session and an unlocked collection, which normally comes from a login (PAM) or an unlock password. So clyde needs an encrypted-file fallback for Linux servers and containers. |
+| WSL2 key store (keys) | unrun | WSL2 behaviour (no Credential Manager from Linux, keyring the same as headless Linux) is still unverified and needs a Windows machine. |
+
+See also: [Design](design.md) · [Rulings](plan.md)
